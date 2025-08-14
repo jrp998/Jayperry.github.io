@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Reef Runner — Mason is ONE</title>
+<style>
+  :root{
+    --bg1:#023047; --bg2:#04678a; --sand:#f2e6c8;
+    --reef:#0ea5e9; --accent:#fbbf24; --good:#10b981; --bad:#ef4444;
+    --ui:#ffffff; --shadow:rgba(0,0,0,.22);
+    --font: ui-rounded, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  }
+  html,body {height:100%; margin:0; background: radial-gradient(120% 120% at 50% 0%, var(--bg2) 0%, var(--bg1) 60%, #012432 100%); font-family: var(--font);}
+  .wrap {display:grid; place-items:center; height:100%; padding:12px;}
+  .gamebox {position:relative; width:min(900px, 96vw); aspect-ratio:16/9; border-radius:18px; overflow:hidden; box-shadow:0 12px 30px var(--shadow); background:linear-gradient(#045a7a,#02384e);}
+  canvas {width:100%; height:100%; display:block; background: transparent;}
+  .hud {position:absolute; inset:0; pointer-events:none; color:var(--ui); font-weight:700; text-shadow:0 2px 4px rgba(0,0,0,.35);}
+  .hud .top {position:absolute; top:10px; left:12px; right:12px; display:flex; gap:10px; align-items:center; justify-content:space-between;}
+  .pill {background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.18); padding:6px 10px; border-radius:999px; backdrop-filter: blur(4px);}
+  .letters {letter-spacing:.15em}
+  .controls {position:absolute; bottom:8px; left:8px; right:8px; display:flex; justify-content:space-between; gap:10px;}
+  .btn {pointer-events:auto; border:none; border-radius:999px; padding:10px 14px; font-weight:800; color:#023047; background:#fff; box-shadow:0 6px 14px rgba(0,0,0,.25); cursor:pointer;}
+  .btn.small {padding:6px 10px; font-weight:700}
+  .btn.tog {background:#c7f9e5;}
+  .btn:active {transform:translateY(1px);}
+  .joystick {pointer-events:auto; position:absolute; bottom:16px; left:16px; width:130px; height:130px; border-radius:999px; background:rgba(255,255,255,.06); border:1px dashed rgba(255,255,255,.25); display:none;}
+  .stick {position:absolute; width:56px; height:56px; border-radius:999px; background:rgba(255,255,255,.7); left:37px; top:37px; transform:translate(0,0);}
+  @media (max-width: 780px) {
+    .joystick {display:block;}
+    .controls .btn:not(.small){display:none;}
+  }
+  .overlay {position:absolute; inset:0; display:none; place-items:center; background:rgba(0,0,0,.35); backdrop-filter: blur(4px);}
+  .card {max-width:min(700px,92%); color:#0b3a4a; background:#fff; border-radius:20px; padding:18px; box-shadow:0 18px 40px rgba(0,0,0,.35);}
+  .card h2 {margin:.3em 0 .4em; font-size:clamp(22px,3vw,32px);}
+  .inv {display:grid; gap:8px; margin:10px 0 6px;}
+  .inv .row {display:flex; gap:10px; align-items:center;}
+  .inv .tag {font-weight:900; color:#0369a1; background:#e0f2fe; padding:2px 8px; border-radius:999px;}
+  .rsvp {display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
+  .rsvp a {text-decoration:none;}
+  .note {font-size:.92rem; color:#0b3a4a; opacity:.8}
+  .kbd {font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#e2e8f0; border-radius:6px; padding:0 6px; border:1px solid #cbd5e1}
+</style>
+
+<style>
+  .damage {
+    box-shadow: 0 0 30px 15px rgba(255, 0, 0, 0.7);
+    border-radius: 50%;
+  }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <div class="gamebox" id="gamebox">
+    <canvas id="game" width="960" height="540" aria-label="Reef Runner canvas"></canvas>
+
+    <div class="hud">
+      <div class="top">
+        <div class="pill">Collect: <span class="letters" id="letters">M · A · S · O · N</span></div>
+        <div class="pill">Score: <span id="score">0</span></div>
+        <div class="pill">Lives: <span id="lives">3</span></div>
+      </div>
+      <div class="controls">
+        <button class="btn small tog" id="babyBtn" title="Easier mode for little hands">Baby Mode: OFF</button>
+        <div style="display:flex; gap:8px">
+          <button class="btn small" id="pauseBtn">Pause</button>
+          <button class="btn small" id="restartBtn">Restart</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="joystick" id="joystick"><div class="stick" id="stick"></div></div>
+
+    <div class="overlay" id="winOverlay" role="dialog" aria-modal="true">
+      <div class="card">
+        <h2>🎉 You made it! Here are the party details</h2>
+        <div class="inv">
+          <div class="row"><span class="tag">Theme</span> <span id="invTitle">Join us for an UNDER THE SEA Birthday Party — Mason is ONE</span></div>
+          <div class="row"><span class="tag">When</span> <span id="invWhen">Saturday, October 18 · 11:30 AM – 2:30 PM</span></div>
+          <div class="row"><span class="tag">Where</span> <span id="invWhere">Dapto Ribbonwood Centre · Scribbly Gum Room</span></div>
+        </div>
+        <div class="rsvp">
+          <a class="btn" id="rsvpBtn" target="_blank" rel="noopener">RSVP</a>
+          <button class="btn" id="playAgainBtn">Play again</button>
+        </div>
+        <p class="note">Tip: Edit the SETTINGS section in the script to change details, difficulty, and Baby Mode defaults.</p>
+      </div>
+    </div>
+
+    <div class="overlay" id="pauseOverlay">
+      <div class="card">
+        <h2>⏸ Paused</h2>
+        <p>Move with arrow keys / WASD, drag on the canvas, or use the joystick. Press <span class="kbd">P</span> to toggle pause.</p>
+        <div class="rsvp">
+          <button class="btn" id="resumeBtn">Resume</button>
+          <button class="btn" id="quitBtn">Quit</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================
+   SETTINGS (edit these)
+========================= */
+const INVITE = {
+  title: "Join us for an UNDER THE SEA Birthday Party — Mason is ONE",
+  when:  "Saturday, October 18 · 11:30 AM – 2:30 PM",
+  where: "Dapto Ribbonwood Centre · Scribbly Gum Room",
+  phone: "0402164982",
+  email: "jay-perry@outlook.com"
+};
+
+const DIFFICULTY = {
+  lives: 4,
+  // Enemy pacing dialed back a touch
+  enemyCount: 4,
+  enemySpeedMin: 0.28,
+  enemySpeedMax: 0.49,
+  spawnLetterEvery: 3200, // ms
+  winWord: "MASON"
+};
+
+// Smooth player motion parameters (tweak these to taste)
+const PLAYER_PHYSICS = {
+  accel: 0.025,     // acceleration per ms when a direction is pressed
+  maxSpeed: 0.35,   // px per ms
+  drag: 0.92,       // velocity kept each 16ms frame (0.92 = gentle glide)
+  pointerFollow: 0.010 // how quickly the fish steers toward the pointer target
+};
+
+const BABY_MODE = {
+  enabledByDefault: false,
+  speedScale: 0.85,      // slightly slower max speed
+  accelScale: 0.9,
+  enemySpeedScale: 0.7,
+  extraLives: 2,
+  biggerPlayer: 1.2,
+  slowerSpawns: 1.25
+};
+/* ========================= */
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const ui = {
+  letters: document.getElementById('letters'),
+  score: document.getElementById('score'),
+  lives: document.getElementById('lives'),
+  pauseOverlay: document.getElementById('pauseOverlay'),
+  winOverlay: document.getElementById('winOverlay'),
+  resumeBtn: document.getElementById('resumeBtn'),
+  quitBtn: document.getElementById('quitBtn'),
+  pauseBtn: document.getElementById('pauseBtn'),
+  restartBtn: document.getElementById('restartBtn'),
+  playAgainBtn: document.getElementById('playAgainBtn'),
+  babyBtn: document.getElementById('babyBtn'),
+  rsvpBtn: document.getElementById('rsvpBtn'),
+  invTitle: document.getElementById('invTitle'),
+  invWhen: document.getElementById('invWhen'),
+  invWhere: document.getElementById('invWhere'),
+  joystick: document.getElementById('joystick'),
+  stick: document.getElementById('stick')
+};
+
+// populate invite text
+ui.invTitle.textContent = INVITE.title;
+ui.invWhen.textContent = INVITE.when;
+ui.invWhere.textContent = INVITE.where;
+
+// Device-aware RSVP (phone on mobile, email on desktop)
+const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || ('ontouchstart' in window && screen.width < 1025);
+function updateRsvpLink(){
+  if(isMobile){
+    ui.rsvpBtn.href = `tel:${INVITE.phone.replace(/\s+/g,'')}`;
+    ui.rsvpBtn.setAttribute('aria-label', `Call ${INVITE.phone}`);
+  }else{
+    const subject = encodeURIComponent("RSVP Mason’s Under the Sea");
+    ui.rsvpBtn.href = `mailto:${INVITE.email}?subject=${subject}`;
+    ui.rsvpBtn.setAttribute('aria-label', `Email ${INVITE.email}`);
+  }
+}
+updateRsvpLink();
+
+const rand = (a,b)=>a+Math.random()*(b-a);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+let keys = new Set();
+let pointer = {active:false, x:0, y:0};
+let paused = false, won = false, babyOn = BABY_MODE.enabledByDefault;
+let game;
+
+class Player{
+  constructor(){
+    const scale = babyOn ? BABY_MODE.biggerPlayer : 1;
+    this.size = 20 * scale;
+    this.x = 120; this.y = canvas.height/2;
+    this.vx = 0; this.vy = 0;
+    this.invuln = 0; // ms
+  }
+  update(dt){
+    // Smooth acceleration with drag
+    const phys = PLAYER_PHYSICS;
+    const accel = phys.accel * (babyOn ? BABY_MODE.accelScale : 1);
+    const maxV = phys.maxSpeed * (babyOn ? BABY_MODE.speedScale : 1);
+
+    // keyboard input -> acceleration
+    let ax = 0, ay = 0;
+    if(keys.has('ArrowLeft')||keys.has('a')) ax -= accel*dt;
+    if(keys.has('ArrowRight')||keys.has('d')) ax += accel*dt;
+    if(keys.has('ArrowUp')||keys.has('w')) ay -= accel*dt;
+    if(keys.has('ArrowDown')||keys.has('s')) ay += accel*dt;
+
+    // pointer follow easing
+    if(pointer.active){
+      const dx = pointer.x - this.x;
+      const dy = pointer.y - this.y;
+      ax += dx * PLAYER_PHYSICS.pointerFollow;
+      ay += dy * PLAYER_PHYSICS.pointerFollow;
+    }
+
+    // integrate velocity
+    this.vx = (this.vx + ax) * Math.pow(PLAYER_PHYSICS.drag, dt/16);
+    this.vy = (this.vy + ay) * Math.pow(PLAYER_PHYSICS.drag, dt/16);
+
+    // clamp max speed
+    const speed = Math.hypot(this.vx, this.vy);
+    if(speed > maxV){ const s = maxV / speed; this.vx *= s; this.vy *= s; }
+
+    // move
+    this.x = clamp(this.x + this.vx*dt, this.size, canvas.width - this.size);
+    this.y = clamp(this.y + this.vy*dt, this.size, canvas.height - this.size);
+
+    if(this.invuln>0) this.invuln -= dt;
+  }
+draw(){
+  const s = this.size;
+  ctx.save();
+  ctx.translate(this.x, this.y);
+  ctx.shadowColor = "rgba(0,0,0,.2)";
+  ctx.shadowBlur = 8;
+
+  // Body (wetsuit)
+  ctx.fillStyle = '#1e3a8a'; // navy
+  ctx.beginPath();
+  ctx.ellipse(0, 0, s*0.6, s*1.2, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Head
+  ctx.fillStyle = '#fde68a'; // skin tone
+  ctx.beginPath();
+  ctx.arc(0, -s*1.4, s*0.5, 0, Math.PI*2);
+  ctx.fill();
+
+  // Mask
+  ctx.strokeStyle = '#0ea5e9'; // blue frame
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.rect(-s*0.5, -s*1.6, s, s*0.4);
+  ctx.stroke();
+
+  // Mask glass
+  ctx.fillStyle = 'rgba(173, 216, 230, 0.6)';
+  ctx.fillRect(-s*0.5, -s*1.6, s, s*0.4);
+
+  // Snorkel tube
+  ctx.strokeStyle = '#ef4444'; // red snorkel
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(s*0.5, -s*1.6);
+  ctx.lineTo(s*0.8, -s*2.4);
+  ctx.stroke();
+
+  // Arms
+  ctx.strokeStyle = '#1e3a8a';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-s*0.6, -s*0.4);
+  ctx.lineTo(-s*1.2, 0);
+  ctx.moveTo(s*0.6, -s*0.4);
+  ctx.lineTo(s*1.2, 0);
+  ctx.stroke();
+
+  // Legs
+  ctx.beginPath();
+  ctx.moveTo(-s*0.4, s*1.0);
+  ctx.lineTo(-s*0.6, s*1.8);
+  ctx.moveTo(s*0.4, s*1.0);
+  ctx.lineTo(s*0.6, s*1.8);
+  ctx.stroke();
+
+  // Fins
+  ctx.fillStyle = '#10b981'; // green fins
+  ctx.beginPath();
+  ctx.moveTo(-s*0.6, s*1.8);
+  ctx.lineTo(-s*1.0, s*2.2);
+  ctx.lineTo(-s*0.2, s*2.2);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(s*0.6, s*1.8);
+  ctx.lineTo(s*1.0, s*2.2);
+  ctx.lineTo(s*0.2, s*2.2);
+  ctx.closePath();
+  ctx.fill();
+
+  
+  // Damage glow (first ~300ms of invulnerability)
+  if (this.invuln > 900) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,0,0,0.9)';
+    ctx.shadowBlur = 30;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s*1.6, s*1.6, 0, 0, Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,0,0,0.9)';
+    ctx.lineWidth = 6;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+}
+class Jelly{
+  constructor(){
+    this.r = rand(16,28);
+    this.x = rand(canvas.width*0.5, canvas.width-40);
+    this.y = rand(40, canvas.height-40);
+    const base = rand(DIFFICULTY.enemySpeedMin, DIFFICULTY.enemySpeedMax) * (babyOn? BABY_MODE.enemySpeedScale:1);
+    // store velocity in px/ms for smooth dt
+    this.vx = (Math.random()<0.5?-1:1)*base;
+    this.vy = (Math.random()<0.5?-1:1)*base*0.6;
+    this.phase = Math.random()*Math.PI*2;
+  }
+  update(dt){
+    this.x += this.vx*dt;
+    this.y += this.vy*dt;
+    if(this.x<this.r||this.x>canvas.width-this.r) this.vx*=-1;
+    if(this.y<this.r||this.y>canvas.height-this.r) this.vy*=-1;
+    this.phase += dt/600;
+  }
+  draw(){
+    const r = this.r;
+    ctx.save(); ctx.translate(this.x,this.y);
+    const body = ctx.createRadialGradient(0,-r*0.2, r*0.2, 0,0, r);
+    body.addColorStop(0,'rgba(168, 85, 247, .95)');
+    body.addColorStop(1,'rgba(99, 102, 241, .85)');
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.ellipse(0,0,r*1.1,r,0,0,Math.PI*2); ctx.fill();
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(255,255,255,.6)';
+    for(let i=-2;i<=2;i++){
+      ctx.beginPath();
+      ctx.moveTo(i*5, r*0.4);
+      ctx.quadraticCurveTo(i*6, r*0.8, i*6 + Math.sin(this.phase + i)*6, r*1.2);
+      ctx.stroke();
+    }
+    ctx.fillStyle='#02263a'; ctx.beginPath(); ctx.arc(-r*0.25,-r*0.15, r*0.12,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(r*0.25,-r*0.15, r*0.12,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+class Shell{
+  constructor(letter){
+    this.letter = letter;
+    this.r = 18;
+    this.x = rand(60, canvas.width-60);
+    this.y = rand(60, canvas.height-60);
+    this.float = Math.random()*Math.PI*2;
+  }
+  update(dt){ this.float += dt/650; }
+  draw(){
+    ctx.save(); ctx.translate(this.x,this.y + Math.sin(this.float)*4);
+    ctx.fillStyle = '#fda4af';
+    ctx.beginPath();
+    ctx.moveTo(-18,8); ctx.quadraticCurveTo(-12,-14,0,-18); ctx.quadraticCurveTo(12,-14,18,8); ctx.quadraticCurveTo(0,14,-18,8);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#02263a'; ctx.font='bold 18px ui-rounded, system-ui, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(this.letter, 0, 0);
+    ctx.restore();
+  }
+}
+
+function resetGame(){
+  const baseLives = DIFFICULTY.lives + (babyOn? BABY_MODE.extraLives:0);
+  game = {
+    player: new Player(),
+    enemies: [],
+    shells: [],
+    want: DIFFICULTY.winWord.split(''),
+    have: [],
+    lastSpawn: 0,
+    score: 0,
+    pendingLose: false,
+lives: baseLives,
+    t: 0
+  };
+  ui.lives.textContent = game.lives;
+  ui.score.textContent = 0;
+  ui.letters.textContent = game.want.join(' · ');
+  won=false;
+}
+
+function spawnEnemies(){
+  game.enemies = [];
+  const n = DIFFICULTY.enemyCount;
+  for(let i=0;i<n;i++) game.enemies.push(new Jelly());
+}
+
+function spawnShell(){
+  const letter = game.want[game.have.length] || '★';
+  game.shells.push(new Shell(letter));
+}
+
+function collides(ax,ay,ar, bx,by,br){
+  return Math.hypot(ax-bx, ay-by) < (ar+br);
+}
+
+let lastTime = 0;
+function loop(ts){
+  if(paused||won){ lastTime = ts; requestAnimationFrame(loop); return; }
+  const dt = Math.min(40, ts - lastTime || 16); // ms since last frame
+  lastTime = ts;
+  game.t += dt;
+
+  game.player.update(dt);
+  for(const e of game.enemies) e.update(dt);
+  for(const s of game.shells) s.update(dt);
+
+  const interval = DIFFICULTY.spawnLetterEvery * (babyOn? BABY_MODE.slowerSpawns:1);
+  if(game.shells.length===0 || (game.t - game.lastSpawn) > interval){
+    game.lastSpawn = game.t; spawnShell();
+  }
+
+  // collect
+  for(let i=game.shells.length-1;i>=0;i--){
+    const s = game.shells[i];
+    if(collides(game.player.x, game.player.y, game.player.size*0.9, s.x, s.y, s.r)){
+      game.have.push(s.letter);
+      game.shells.splice(i,1);
+      game.score += 100;
+      ui.score.textContent = game.score;
+      ui.letters.textContent = game.want.map((L,idx)=> idx<game.have.length ? `✔ ${L}` : L).join(' · ');
+      if(game.have.length === game.want.length){ winGame(); return; }
+    }
+  }
+
+  // hit enemies
+  if(game.player.invuln<=0){
+    for(const e of game.enemies){
+      if(collides(game.player.x, game.player.y, game.player.size*0.9, e.x, e.y, e.r*0.9)){
+        game.lives -= 1;
+        ui.lives.textContent = game.lives;
+        game.player.invuln = 1200;
+        if(game.lives<=0){ if(!game.pendingLose){ game.pendingLose = true; setTimeout(()=>{ loseGame(); }, 250); }
+}
+        break;
+      }
+    }
+  }
+
+  drawScene();
+  requestAnimationFrame(loop);
+}
+
+function drawScene(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // background bubbles
+  for(let i=0;i<6;i++){
+    ctx.fillStyle='rgba(255,255,255,0.08)';
+    const r = 20+i*6;
+    ctx.beginPath(); ctx.arc((i*170+ (Date.now()/40)%960)%960, (i*90 + (Date.now()/30))%540, r, 0, Math.PI*2); ctx.fill();
+  }
+
+  // seabed
+  ctx.fillStyle = '#e9dcb8';
+  ctx.beginPath();
+  ctx.moveTo(0,520);
+  for(let x=0;x<=960;x+=80){
+    const y = 510 + Math.sin((x+ Date.now()/300)/70)*6;
+    ctx.lineTo(x,y);
+  }
+  ctx.lineTo(960,540); ctx.lineTo(0,540); ctx.closePath(); ctx.fill();
+
+  // corals
+  const coral = (x,y,color)=>{ ctx.save(); ctx.translate(x,y); ctx.fillStyle=color;
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.quadraticCurveTo(-8,-40,-2,-80); ctx.quadraticCurveTo(12,-60,10,-20);
+    ctx.quadraticCurveTo(26,-60,20,-100); ctx.quadraticCurveTo(40,-80,34,-40);
+    ctx.quadraticCurveTo(58,-70,52,-110); ctx.quadraticCurveTo(70,-100,60,-60);
+    ctx.lineTo(60,0); ctx.closePath(); ctx.fill(); ctx.restore();
+  };
+  coral(140,520,'#fb923c'); coral(740,520,'#f472b6'); coral(380,520,'#10b981');
+
+  // draw entities
+  for(const s of game.shells) s.draw();
+  for(const e of game.enemies) e.draw();
+  game.player.draw();
+}
+
+function winGame(){ won = true; ui.winOverlay.style.display='grid'; }
+function loseGame(){
+  paused = true;
+  ui.pauseOverlay.querySelector('h2').textContent = "💤 Oops! Out of lives";
+  ui.pauseOverlay.style.display='grid';
+}
+
+// Input
+window.addEventListener('keydown', (e)=>{
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'].includes(e.key)) keys.add(e.key);
+  if(e.key==='p'||e.key==='P') togglePause();
+});
+window.addEventListener('keyup', (e)=> keys.delete(e.key));
+
+canvas.addEventListener('pointerdown', (e)=>{ pointer.active=true; movePointer(e); });
+window.addEventListener('pointermove', (e)=>{ if(pointer.active) movePointer(e); });
+window.addEventListener('pointerup', ()=>{ pointer.active=false; });
+
+function movePointer(e){
+  const rect = canvas.getBoundingClientRect();
+  pointer.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+  pointer.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+}
+
+// joystick
+(function initJoystick(){
+  const j = ui.joystick, s = ui.stick;
+  let dragging=false, base={x:0,y:0};
+  j.addEventListener('pointerdown', (e)=>{ dragging=true; base=getPos(e); setStick(0,0); });
+  window.addEventListener('pointermove', (e)=>{ if(!dragging) return; const p=getPos(e); const dx=p.x-base.x, dy=p.y-base.y; setStick(dx,dy); applyStick(dx,dy); });
+  window.addEventListener('pointerup', ()=>{ dragging=false; setStick(0,0); applyStick(0,0); });
+  function getPos(e){ const r=j.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+  function setStick(dx,dy){ const lim=37; const nx=clamp(dx,-lim,lim), ny=clamp(dy,-lim,lim); s.style.transform=`translate(${nx}px,${ny}px)`; }
+  function applyStick(dx,dy){
+    const lim=37; const nx=dx/lim, ny=dy/lim;
+    [['a',nx<-0.3],['d',nx>0.3],['w',ny<-0.3],['s',ny>0.3]].forEach(([k,on])=>{ if(on) keys.add(k); else keys.delete(k); });
+  }
+})();
+
+// Buttons & pause
+function togglePause(){ paused = !paused; ui.pauseOverlay.style.display = paused ? 'grid':'none'; }
+ui.pauseBtn.addEventListener('click',togglePause);
+ui.resumeBtn.addEventListener('click',togglePause);
+ui.quitBtn.addEventListener('click', ()=>{ resetGame(); spawnEnemies(); paused=false; ui.pauseOverlay.style.display='none'; });
+ui.restartBtn.addEventListener('click', ()=>{ resetGame(); spawnEnemies(); });
+ui.playAgainBtn.addEventListener('click', ()=>{ ui.winOverlay.style.display='none'; resetGame(); spawnEnemies(); paused=false; });
+
+// Baby Mode toggle
+ui.babyBtn.addEventListener('click', ()=>{
+  babyOn = !babyOn;
+  ui.babyBtn.textContent = `Baby Mode: ${babyOn?'ON':'OFF'}`;
+  resetGame(); spawnEnemies();
+});
+
+// Boot
+function start(){
+  if(BABY_MODE.enabledByDefault){ babyOn = true; ui.babyBtn.textContent = 'Baby Mode: ON'; }
+  resetGame(); spawnEnemies();
+  requestAnimationFrame(loop);
+}
+start();
+
+function showDamage(playerElement) {
+  playerElement.classList.add('damage');
+  setTimeout(() => {
+    playerElement.classList.remove('damage');
+  }, 300);
+}
+
+</script>
+</body>
+</html>
